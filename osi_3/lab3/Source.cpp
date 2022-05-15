@@ -4,64 +4,62 @@
 
 using namespace std;
 
-class SyncQueue
+
+class CircleQueue
 {
 private:
 	int* queue;
 	int size;
-	int pushPos;
-	int popPos;
+	int position_of_pushing;
+	int position_of_deleting;
 	HANDLE full;
 	HANDLE empty;
-	CRITICAL_SECTION cs;
+	CRITICAL_SECTION crit_section;
 
 public:
-	SyncQueue(int size)
+	CircleQueue(int size)
 	{
-		this->pushPos = 0;
-		this->popPos = 0;
+		this->position_of_pushing = 0;
+		this->position_of_deleting = 0;
 		this->size = size;
 		this->queue = new int[size];
 
 		full = CreateSemaphore(NULL, 0, size, NULL);
 		empty = CreateSemaphore(NULL, size, size, NULL);
-		InitializeCriticalSection(&cs);
+		InitializeCriticalSection(&crit_section);
 	}
 
-	~SyncQueue()
+	void vstavka(int element)
 	{
-		DeleteCriticalSection(&cs);
+		WaitForSingleObject(empty, INFINITE);
+		EnterCriticalSection(&crit_section);
+		queue[position_of_pushing++] = element;
+		if (position_of_pushing == size)
+		{
+			position_of_pushing = 0;
+		}
+		LeaveCriticalSection(&crit_section);
+		ReleaseSemaphore(full, 1, NULL);
+	}
+
+	~CircleQueue()
+	{
+		DeleteCriticalSection(&crit_section);
 		CloseHandle(empty);
 		CloseHandle(full);
 		delete[]queue;
 	}
 
-	void insert(int element)
-	{
-		WaitForSingleObject(empty, INFINITE);
-
-		EnterCriticalSection(&cs);
-		queue[pushPos++] = element;
-		if (pushPos == size)
-		{
-			pushPos = 0;
-		}
-		LeaveCriticalSection(&cs);
-
-		ReleaseSemaphore(full, 1, NULL);
-	}
-
-	int remove()
+	int deleting()
 	{
 		WaitForSingleObject(full, INFINITE);
-
-		EnterCriticalSection(&cs);
-		int element = queue[popPos++];
-		if (popPos == size)
+		EnterCriticalSection(&crit_section);
+		int element = queue[position_of_deleting++];
+		if (position_of_deleting == size)
 		{
-			popPos = 0;
+			position_of_deleting = 0;
 		}
-		LeaveCriticalSection(&cs);
+		LeaveCriticalSection(&crit_section);
 
 		ReleaseSemaphore(empty, 1, NULL);
 
@@ -71,16 +69,16 @@ public:
 
 HANDLE start;
 
-struct DataForProducer
+struct Creating_info_for_produser
 {
-	SyncQueue* queue;
+	CircleQueue* queue;
 	int number;
 	int count;
 };
 
-struct DataForConsumer
+struct Creating_info_for_consumer
 {
-	SyncQueue* queue;
+	CircleQueue* queue;
 	int count;
 };
 
@@ -88,13 +86,13 @@ DWORD WINAPI producer(LPVOID par)
 {
 	WaitForSingleObject(start, INFINITE);
 
-	DataForProducer* data = (DataForProducer*)par;
+	Creating_info_for_produser* data = (Creating_info_for_produser*)par;
 
 
 	for (int i = 0; i < data->count; i++)
 	{
-		data->queue->insert(data->number * 100 + i);
-		cout << "Thread " << data->number << " put in queue number :\"" << data->number * 100 + i << "\"\n";
+		data->queue->vstavka(data->number * i);
+		cout << "Поток " << data->number << " положил в очередь число : "<< data->number *  i << "\n";
 		Sleep(7);
 	}
 
@@ -105,13 +103,12 @@ DWORD WINAPI consumer(LPVOID par)
 {
 	WaitForSingleObject(start, INFINITE);
 
-	DataForConsumer* data = (DataForConsumer*)par;
+	Creating_info_for_consumer* data = (Creating_info_for_consumer*)par;
 
 	for (int i = 0; i < data->count; i++)
 	{
-		int number = data->queue->remove();
-		cout << "\t\tNumber \"" << number << "\" was removed from queue.\n";
-		Sleep(7);
+		int number = data->queue->deleting();
+		cout << "\t\tЧисло \"" << number << "\" было удалено из очереди.\n";
 	}
 
 	return 0;
@@ -119,22 +116,23 @@ DWORD WINAPI consumer(LPVOID par)
 
 void main()
 {
-	cout << "Enter queue size:\n";
+	setlocale(LC_ALL, "Russian");
+	cout << "Внесите размер очереди:\n";
 	int queueSize;
 	cin >> queueSize;
 
 	start = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-	SyncQueue* queue = new SyncQueue(queueSize);
+	CircleQueue* queue = new CircleQueue(queueSize);
 
-	cout << "Enter Produecer count:\n";
+	cout << "Внесите количество Producers :\n";
 	int prodThreadCount;
 	cin >> prodThreadCount;
 
-	DataForProducer* workWithProductCountProducer = new DataForProducer[prodThreadCount];
+	Creating_info_for_produser* workWithProductCountProducer = new Creating_info_for_produser[prodThreadCount];
 	for (int i = 0; i < prodThreadCount; i++)
 	{
-		cout << "Enter number of produce in " << i + 1 << " thread:\n";
+		cout << "Внесите количество чисел для Produce в " << i + 1 << " потоке:\n";
 		int count;
 		cin >> count;
 		workWithProductCountProducer[i].count = count;
@@ -151,14 +149,14 @@ void main()
 	}
 
 
-	cout << "Enter Consumer count:\n";
+	cout << "Внесите количество Consumers:\n";
 	int consThreadCount;
 	cin >> consThreadCount;
 
-	DataForConsumer* workWithProductCountConsumer = new DataForConsumer[consThreadCount];
+	Creating_info_for_consumer* workWithProductCountConsumer = new Creating_info_for_consumer[consThreadCount];
 	for (int i = 0; i < consThreadCount; i++)
 	{
-		cout << "Enter number of cunsome products in " << i + 1 << " thread:\n";
+		cout << "Внесите количество чисел для consume в " << i + 1 << " потоке:\n";
 		int count;
 		cin >> count;
 		workWithProductCountConsumer[i].count = count;

@@ -6,18 +6,13 @@
 
 using namespace std;
 
-HANDLE FULL;
-HANDLE EMPTY;
-HANDLE MUTEX;
-int messagesNumber;
-
 struct Message {
 	char name[20];
 	char text[20];
 
 	Message() {
-		strcpy(name, "111");
-		strcpy(text, "111");
+		strcpy(name, "default");
+		strcpy(text, "default");
 	}
 
 	Message(char* name1, char* text1) {
@@ -26,7 +21,12 @@ struct Message {
 	}
 };
 
-void write(char* filename, char* message, char* authorName) {
+HANDLE FULL;
+HANDLE EMPTY;
+HANDLE MUTEX;
+int num_of_massges;
+
+void record(char* filename, char* message, char* name_of_founder) {
 	WaitForSingleObject(EMPTY, INFINITE);
 	WaitForSingleObject(MUTEX, INFINITE);
 
@@ -36,15 +36,15 @@ void write(char* filename, char* message, char* authorName) {
 	char p[10];
 	f.read(p, sizeof(p));
 	messageWritePos = atoi(p);
-	cout << "Message write pos: " << messageWritePos << endl;
+	cout << "Позиция записи сообщения: " << messageWritePos << endl;
 
-	Message* m = new Message(authorName, message);
+	Message* m = new Message(name_of_founder, message);
 	int pos = sizeof(p) + sizeof(Message) * messageWritePos;
 	f.seekp(pos, ios::beg);
 	f.write((char*)m, sizeof(Message));
 
 	messageWritePos++;
-	if (messageWritePos == messagesNumber) {
+	if (messageWritePos == num_of_massges) {
 		messageWritePos = 0;
 	}
 	itoa(messageWritePos, p, 10);
@@ -58,26 +58,29 @@ void write(char* filename, char* message, char* authorName) {
 }
 
 int main(int argc, char* argv[]) {
+
+	setlocale(LC_ALL, "Russian");
+
 	FULL = OpenSemaphore(SEMAPHORE_ALL_ACCESS, FALSE, (LPCWSTR)"Full");
 	EMPTY = OpenSemaphore(SEMAPHORE_ALL_ACCESS, FALSE, (LPCWSTR)"Empty");
 	MUTEX = OpenMutex(MUTEX_ALL_ACCESS, FALSE, (LPCWSTR)"Mutex");
 	
 	char* filename = argv[1];
-	messagesNumber = atoi(argv[2]);
-	cout << "Enter name:\n";
+	num_of_massges = atoi(argv[2]);
+	cout << "Внесите имя :\n";
 	char name[20];
 	cin >> name;
 	bool doCycle = true;
 	while (doCycle) {
-		cout << "Enter:\n1) Write\n2) Exit\n";
+		cout << "Выберите:\n1) Запись\n2) Выход\n";
 		int answer;
 		cin >> answer;
 
 		if (answer == 1) {
-			cout << "Enter message:\n";
+			cout << "Введите сообщение :\n";
 			char message[30];
 			cin >> message;
-			write(filename, message, name);
+			record(filename, message, name);
 		}
 		else if (answer == 2) {
 			doCycle = false;

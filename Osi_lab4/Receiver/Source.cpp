@@ -6,17 +6,13 @@
 
 using namespace std;
 
-HANDLE FULL, EMPTY, MUTEX;
-int messageReadPos = 0;
-int messagesNumber;
-
 struct Message {
 	char name[20];
 	char text[20];
 
 	Message() {
-		strcpy(name, "111");
-		strcpy(text, "111");
+		strcpy(name, "default");
+		strcpy(text, "default");
 	}
 
 	Message(char* name1, char* text1) {
@@ -30,7 +26,11 @@ struct Message {
 	}
 };
 
-void createFile(char* filename, int messagesNumber) {
+HANDLE FULL, EMPTY, MUTEX;
+int position_of_read_mass = 0;
+int num_of_massges;
+
+void file_creating(char* filename, int messagesNumber) {
 	ofstream fout(filename, ios::binary);
 	int pos = 0;
 	char p[10];
@@ -46,7 +46,7 @@ void createFile(char* filename, int messagesNumber) {
 void read(char* filename) {
 	WaitForSingleObject(FULL, INFINITE);
 	WaitForSingleObject(MUTEX, INFINITE);
-	cout << "Message read pos: " << messageReadPos << endl;
+	cout << "Позиция для чтения: " << position_of_read_mass << endl;
 
 	fstream f(filename, ios::binary | ios::in | ios::out);
 	if (!f.is_open()) {
@@ -56,19 +56,19 @@ void read(char* filename) {
 
 	Message* m = new Message();
 	char writeIter[10];
-	int pos = sizeof(writeIter) + sizeof(Message) * messageReadPos;
+	int pos = sizeof(writeIter) + sizeof(Message) * position_of_read_mass;
 
 	f.seekg(pos, ios::beg);
 	f.read((char*)m, sizeof(Message));
-	cout << "Message author: " << m->name << ", text: " << m->text << endl;
+	cout << "Сообщение от автора: " << m->name << ", сообщение: " << m->text << endl;
 
 	f.seekp(pos, ios::beg);
 	m = new Message("deleted", "deleted");
 	f.write((char*)m, sizeof(Message));
 
-	messageReadPos++;
-	if (messageReadPos == messagesNumber) {
-		messageReadPos = 0;
+	position_of_read_mass++;
+	if (position_of_read_mass == num_of_massges) {
+		position_of_read_mass = 0;
 	}
 
 	f.close();
@@ -78,20 +78,22 @@ void read(char* filename) {
 }
 
 void main() {
-	cout << "Enter file name:\n";
+	setlocale(LC_ALL, "Russian");
+
+	cout << "Введите название файла:\n";
 	char filename[20];
 	cin >> filename;
 
-	cout << "Enter messages number:\n";
-	cin >> messagesNumber;
-	createFile(filename, messagesNumber);
+	cout << "Введите номер сообщения:\n";
+	cin >> num_of_massges;
+	file_creating(filename, num_of_massges);
 
-	cout << "Enter Sender process count: \n";
+	cout << "Введите число отправителей: \n";
 	int senderProcessCount;
 	cin >> senderProcessCount;
 
-	FULL = CreateSemaphore(NULL, 0, messagesNumber, (LPCWSTR)"Full");
-	EMPTY = CreateSemaphore(NULL, messagesNumber, messagesNumber, (LPCWSTR)"Empty");
+	FULL = CreateSemaphore(NULL, 0, num_of_massges, (LPCWSTR)"Full");
+	EMPTY = CreateSemaphore(NULL, num_of_massges, num_of_massges, (LPCWSTR)"Empty");
 	MUTEX = CreateMutex(NULL, FALSE, (LPCWSTR)"Mutex");
 
 	STARTUPINFO* si = new STARTUPINFO[senderProcessCount];
@@ -101,7 +103,7 @@ void main() {
 	strcat(data, filename);
 	strcat(data, " ");
 	char num[10];
-	itoa(messagesNumber, num, 10);
+	itoa(num_of_massges, num, 10);
 	strcat(data, num);
 	wchar_t wtext[100];
 	mbstowcs(wtext, data, strlen(data) + 1);
@@ -120,7 +122,7 @@ void main() {
 	system("cls");
 	bool doCycle = true;
 	while (doCycle) {
-		cout << "Enter:\n1) Read\n2) Exit\n";
+		cout << "Выберите:\n1) Читать\n2) Выход\n";
 		int answer;
 		cin >> answer;
 
